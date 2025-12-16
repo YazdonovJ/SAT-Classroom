@@ -51,8 +51,8 @@ export default async function AdminTestAnalyticsPage({
     const passedAttempts = attempts?.filter(a => a.score >= test.passing_score).length || 0
     const passRate = totalAttempts > 0 ? Math.round((passedAttempts / totalAttempts) * 100) : 0
 
-    const avgTime = attempts?.length > 0
-        ? Math.round(attempts.reduce((sum, a) => sum + (a.time_spent_seconds || 0), 0) / attempts.length)
+    const avgTime = (attempts?.length || 0) > 0
+        ? Math.round(attempts!.reduce((sum, a) => sum + (a.time_spent_seconds || 0), 0) / attempts!.length)
         : 0
 
     // Question difficulty analysis
@@ -178,8 +178,8 @@ export default async function AdminTestAnalyticsPage({
                                 <div className="w-full bg-muted rounded-full h-2">
                                     <div
                                         className={`h-2 rounded-full ${q.correctRate >= 70 ? 'bg-green-500' :
-                                                q.correctRate >= 40 ? 'bg-orange-500' :
-                                                    'bg-red-500'
+                                            q.correctRate >= 40 ? 'bg-orange-500' :
+                                                'bg-red-500'
                                             }`}
                                         style={{ width: `${q.correctRate}%` }}
                                     />
