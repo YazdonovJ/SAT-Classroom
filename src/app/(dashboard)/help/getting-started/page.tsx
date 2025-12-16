@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
-export default function GetStart StartedPage() {
+export default function GettingStartedPage() {
     return (
         <div className="min-h-screen bg-muted/20 p-8 space-y-8">
             <Link href="/help">
