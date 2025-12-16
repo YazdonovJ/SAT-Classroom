@@ -70,7 +70,7 @@ export function GlobalSearch({ userRole }: { userRole: 'teacher' | 'student' }) 
                     .select('cohorts(*, courses(title))')
                     .eq('user_id', user.id)
 
-                searches.classes = enrollments?.map(e => e.cohorts).filter(c =>
+                searches.classes = enrollments?.map((e: any) => Array.isArray(e.cohorts) ? e.cohorts[0] : e.cohorts).filter((c: any) =>
                     c?.name?.toLowerCase().includes(query.toLowerCase())
                 ) || []
             }

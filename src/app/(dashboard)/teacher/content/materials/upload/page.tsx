@@ -17,7 +17,7 @@ export default async function UploadMaterialPage() {
         .select('cohorts(course_id)')
         .eq('user_id', user.id)
 
-    const courseIds = cohorts?.map(c => c.cohorts?.course_id).filter(Boolean) || []
+    const courseIds = cohorts?.map((c: any) => c.cohorts?.course_id || c.cohorts?.[0]?.course_id).filter(Boolean) || []
 
     const { data: units } = await supabase
         .from('units')

@@ -52,8 +52,8 @@ export default async function TestAnalyticsPage({
     const passedAttempts = attempts?.filter(a => a.score >= test.passing_score).length || 0
     const passRate = totalAttempts > 0 ? Math.round((passedAttempts / totalAttempts) * 100) : 0
 
-    const avgTime = attempts?.length > 0
-        ? Math.round(attempts.reduce((sum, a) => sum + (a.time_spent_seconds || 0), 0) / attempts.length)
+    const avgTime = (attempts?.length || 0) > 0
+        ? Math.round(attempts!.reduce((sum, a) => sum + (a.time_spent_seconds || 0), 0) / attempts!.length)
         : 0
 
     // Question difficulty analysis
@@ -232,8 +232,8 @@ export default async function TestAnalyticsPage({
                                     <div className="w-full bg-muted rounded-full h-2">
                                         <div
                                             className={`h-2 rounded-full ${q.correctRate >= 70 ? 'bg-primary' :
-                                                    q.correctRate >= 40 ? 'bg-orange-500' :
-                                                        'bg-destructive'
+                                                q.correctRate >= 40 ? 'bg-orange-500' :
+                                                    'bg-destructive'
                                                 }`}
                                             style={{ width: `${q.correctRate}%` }}
                                         />

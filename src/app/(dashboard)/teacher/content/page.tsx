@@ -29,7 +29,7 @@ export default async function ContentManagementPage() {
         .select('cohorts(*, courses(id, title))')
         .eq('user_id', user.id)
 
-    const courses = cohorts?.map(c => c.cohorts?.courses).filter(Boolean) || []
+    const courses = cohorts?.map((c: any) => c.cohorts?.courses || c.cohorts?.[0]?.courses).filter(Boolean) || []
     const uniqueCourses = Array.from(new Map(courses.map(c => [c.id, c])).values())
 
     // Count tests created by this teacher

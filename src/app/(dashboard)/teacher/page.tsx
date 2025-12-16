@@ -18,7 +18,7 @@ export default async function TeacherPage() {
         .select('cohort_id, cohorts(name, id, course_id, courses(title))')
         .eq('user_id', user.id)
 
-    const cohorts = teacherCohorts?.map(tc => tc.cohorts) || []
+    const cohorts = teacherCohorts?.map((tc: any) => Array.isArray(tc.cohorts) ? tc.cohorts[0] : tc.cohorts).filter(Boolean) || []
 
     // Calculate simple stats
     const totalClasses = cohorts.length
