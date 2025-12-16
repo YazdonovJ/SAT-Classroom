@@ -78,7 +78,7 @@ export default async function StudentAnalyticsPage({
 
     const uniqueTests = Array.from(testsMap.values())
     const avgScore = totalAttempts > 0
-        ? Math.round(testAttempts.reduce((acc, curr) => acc + (curr.score || 0), 0) / totalAttempts)
+        ? Math.round(testAttempts!.reduce((acc, curr) => acc + (curr.score || 0), 0) / totalAttempts)
         : 0
     const totalTimeSeconds = testAttempts?.reduce((acc, curr) => acc + (curr.time_spent_seconds || 0), 0) || 0
     const totalTimeHours = Math.round(totalTimeSeconds / 3600 * 10) / 10
