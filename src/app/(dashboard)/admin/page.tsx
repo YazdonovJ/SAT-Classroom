@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Users, GraduationCap, BookOpen, FileText, Settings, Plus } from "lucide-react"
 import Link from "next/link"
+import { getTeacherAnalytics } from "@/app/actions/analytics-actions"
+import { TeacherAnalyticsTable } from "@/components/admin/teacher-analytics-table"
 
 export default async function AdminDashboard() {
     await checkAdmin() // Restrict to admin only
@@ -36,6 +38,9 @@ export default async function AdminDashboard() {
     const { count: materialCount } = await supabase
         .from('materials')
         .select('*', { count: 'exact', head: true })
+
+    // Get Teacher Analytics
+    const { data: teacherAnalytics } = await getTeacherAnalytics()
 
     return (
         <div className="min-h-screen bg-muted/20 p-8 space-y-8">
@@ -121,6 +126,9 @@ export default async function AdminDashboard() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Teacher Analytics */}
+            <TeacherAnalyticsTable data={teacherAnalytics || []} />
 
             {/* Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
