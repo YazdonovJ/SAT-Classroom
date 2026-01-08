@@ -7,9 +7,14 @@ import Link from "next/link"
 import { getTeacherAnalytics } from "@/app/actions/analytics-actions"
 import { TeacherAnalyticsTable } from "@/components/admin/teacher-analytics-table"
 
-export default async function AdminDashboard() {
+export default async function AdminDashboard({
+    searchParams
+}: {
+    searchParams: Promise<{ startDate?: string; endDate?: string }>
+}) {
     await checkAdmin() // Restrict to admin only
 
+    const params = await searchParams
     const supabase = await createClient()
 
     // Get counts
@@ -40,7 +45,7 @@ export default async function AdminDashboard() {
         .select('*', { count: 'exact', head: true })
 
     // Get Teacher Analytics
-    const { data: teacherAnalytics } = await getTeacherAnalytics()
+    const { data: teacherAnalytics } = await getTeacherAnalytics(params.startDate, params.endDate)
 
     return (
         <div className="min-h-screen bg-muted/20 p-8 space-y-8">
@@ -69,7 +74,7 @@ export default async function AdminDashboard() {
                     </Card>
                 </Link>
 
-                <Link href="/admin/users">
+                <Link href="/admin/students">
                     <Card className="border-l-4 border-l-purple-500 hover:shadow-md transition-shadow cursor-pointer h-full">
                         <CardHeader className="flex flex-row items-center justify-between pb-2">
                             <CardTitle className="text-sm font-medium text-muted-foreground">Students</CardTitle>
@@ -84,7 +89,7 @@ export default async function AdminDashboard() {
                     </Card>
                 </Link>
 
-                <Link href="/admin/content">
+                <Link href="/admin/classes">
                     <Card className="border-l-4 border-l-indigo-500 hover:shadow-md transition-shadow cursor-pointer h-full">
                         <CardHeader className="flex flex-row items-center justify-between pb-2">
                             <CardTitle className="text-sm font-medium text-muted-foreground">Classes</CardTitle>

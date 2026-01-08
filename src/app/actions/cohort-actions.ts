@@ -81,3 +81,38 @@ export async function removeStudent(cohortId: string, userId: string): Promise<A
         return { success: false, message: error.message }
     }
 }
+
+export async function deleteCohort(cohortId: string): Promise<ActionResponse> {
+    try {
+        const supabase = await createClient()
+
+        // 1. Verify Admin
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error("Unauthorized")
+
+        const { data: userRole } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .single()
+
+        if (!userRole || (userRole.role !== 'admin' && userRole.role !== 'owner')) {
+            throw new Error("Unauthorized")
+        }
+
+        // 2. Delete Cohort (Cascades should handle relationships, but we'll see)
+        // Usually better to be explicit if no cascade, but for now direct delete.
+        const { error } = await supabase
+            .from('cohorts')
+            .delete()
+            .eq('id', cohortId)
+
+        if (error) throw error
+
+        revalidatePath('/admin/classes')
+        return { success: true, message: "Class deleted successfully" }
+    } catch (error: any) {
+        console.error("Delete cohort error:", error)
+        return { success: false, message: error.message }
+    }
+}

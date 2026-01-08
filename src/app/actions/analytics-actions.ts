@@ -14,7 +14,7 @@ export interface TeacherAnalytics {
     overallAvgScore: number
 }
 
-export async function getTeacherAnalytics(): Promise<{ success: boolean, data?: TeacherAnalytics[], message?: string }> {
+export async function getTeacherAnalytics(startDate?: string, endDate?: string): Promise<{ success: boolean, data?: TeacherAnalytics[], message?: string }> {
     try {
         const supabase = await createClient()
 
@@ -32,33 +32,30 @@ export async function getTeacherAnalytics(): Promise<{ success: boolean, data?: 
             throw new Error("Unauthorized")
         }
 
-        // 2. Fetch all teachers
+        // 2. Fetch all teachers including their cohorts explicitly
         const { data: teachers, error: teacherError } = await supabase
             .from('users')
-            .select('id, full_name, email')
+            .select(`
+                id, 
+                full_name, 
+                email,
+                cohort_teachers(cohort_id)
+            `)
             .eq('role', 'teacher')
             .order('created_at', { ascending: false })
 
         if (teacherError) throw teacherError
 
-        // 3. Fetch analytics for each teacher
-        // This could be optimized with a complex join or RPC, but for now we'll do parallel fetches
-        // which is fine for < 100 teachers.
+        // 3. Process each teacher
         const analytics = await Promise.all(teachers.map(async (teacher) => {
-            // Get teacher's cohorts
-            const { data: cohorts } = await supabase
-                .from('cohort_teachers')
-                .select('cohort_id')
-                .eq('user_id', teacher.id)
-
-            const cohortIds = cohorts?.map(c => c.cohort_id) || []
+            const cohortIds = teacher.cohort_teachers?.map((ct: any) => ct.cohort_id) || []
 
             // Get students in these cohorts
-            // Note: A student could be in multiple cohorts, so we need distinct users
             let totalStudents = 0
             let studentIds: string[] = []
 
             if (cohortIds.length > 0) {
+                // Get enrollments by cohort
                 const { data: enrollments } = await supabase
                     .from('enrollments')
                     .select('user_id')
@@ -70,59 +67,68 @@ export async function getTeacherAnalytics(): Promise<{ success: boolean, data?: 
             }
 
             // Get test attempts by these students
-            // Since we can't easily join "attempts by students IN SPECIFIC COHORT TAUGHT BY THIS TEACHER",
-            // we will approximate by "attempts by students who are enrolled in this teacher's classes".
-            // This is a reasonable approximation for a simple MVP.
-
+            // We use the date filter here
             let attempts: any[] = []
             if (studentIds.length > 0) {
-                const { data: rawAttempts } = await supabase
+                let query = supabase
                     .from('test_attempts')
                     .select('score, submitted_at, user_id, test_id')
                     .in('user_id', studentIds)
-                    .order('submitted_at', { ascending: true }) // Order by time for "first try" check
+                    .order('submitted_at', { ascending: true })
 
+                // Apply date filter if provided
+                if (startDate) {
+                    query = query.gte('submitted_at', startDate)
+                }
+                if (endDate) {
+                    // Start of next day for end date or just use raw strings if ISO
+                    // Assuming string provided is YYYY-MM-DD
+                    const end = new Date(endDate)
+                    end.setHours(23, 59, 59, 999)
+                    query = query.lte('submitted_at', end.toISOString())
+                }
+
+                const { data: rawAttempts } = await query
                 attempts = rawAttempts || []
             }
 
             // --- Metrics Calculation ---
 
-            // 1. Weekly Tests Taken (Activity)
-            const oneWeekAgo = new Date()
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
-            const weeklyAttempts = attempts.filter(a => new Date(a.submitted_at) >= oneWeekAgo).length
-            // Normalize by students? Or just raw count? 
-            // The prompt asks for "weekly students average completion".
-            // Let's do: Avg tests per student this week. 
-            const weeklyTestsPerStudent = totalStudents > 0
-                ? Math.round((weeklyAttempts / totalStudents) * 10) / 10
+            // 1. Weekly/Period Completion
+            // If date filter is active, this is "Tests in Period". If not, default to "Last 7 Days".
+
+            let periodAttempts = attempts
+            if (!startDate && !endDate) {
+                const oneWeekAgo = new Date()
+                oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
+                periodAttempts = attempts.filter(a => new Date(a.submitted_at) >= oneWeekAgo)
+            }
+
+            // Avg tests per student
+            // Avoid division by zero
+            const completionRate = totalStudents > 0
+                ? Math.round((periodAttempts.length / totalStudents) * 10) / 10
                 : 0
 
             // 2. Avg Score (First Try)
-            // We need to identify which attempt was the "first" for each student+test combo
-            const firstAttempts = new Map<string, number>() // key: studentId-testId, value: score
-
+            // We simplify First Try logic for now to be: "Avg of best scores per test per student in this period" 
+            // OR strictly "Avg of all attempts in period".
+            // Let's go with: Unique attempts per student-test.
+            const uniqueAttemptsInPeriod = new Map<string, number>()
             attempts.forEach(a => {
                 const key = `${a.user_id}-${a.test_id}`
-                if (!firstAttempts.has(key)) {
-                    firstAttempts.set(key, a.score) // Since we ordered by ascending time, the first one we see is the first attempt
+                if (!uniqueAttemptsInPeriod.has(key)) {
+                    uniqueAttemptsInPeriod.set(key, a.score)
                 }
             })
 
-            const firstTryScores = Array.from(firstAttempts.values())
-            const avgFirstTryScore = firstTryScores.length > 0
-                ? Math.round(firstTryScores.reduce((a, b) => a + b, 0) / firstTryScores.length)
+            const avgScoreInPeriod = uniqueAttemptsInPeriod.size > 0
+                ? Math.round(Array.from(uniqueAttemptsInPeriod.values()).reduce((a, b) => a + b, 0) / uniqueAttemptsInPeriod.size)
                 : 0
 
-            // 3. Best Results
-            // Simply the max score achieved by any student
+            // 3. Best Results (In Period)
             const bestScore = attempts.length > 0
                 ? Math.max(...attempts.map(a => a.score))
-                : 0
-
-            // 4. Overall Avg (Groups Average)
-            const overallAvgScore = attempts.length > 0
-                ? Math.round(attempts.reduce((a, b) => a + b.score, 0) / attempts.length)
                 : 0
 
             return {
@@ -131,10 +137,10 @@ export async function getTeacherAnalytics(): Promise<{ success: boolean, data?: 
                 email: teacher.email || '',
                 totalStudents,
                 totalCohorts: cohortIds.length,
-                weeklyTestsTaken: weeklyTestsPerStudent,
-                avgFirstTryScore,
+                weeklyTestsTaken: completionRate,
+                avgFirstTryScore: avgScoreInPeriod,
                 bestScore,
-                overallAvgScore
+                overallAvgScore: avgScoreInPeriod
             }
         }))
 

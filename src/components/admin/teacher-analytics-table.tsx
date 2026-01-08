@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { TeacherAnalytics } from "@/app/actions/analytics-actions"
 import { TrendingUp, Users, Trophy, BookOpen } from "lucide-react"
+import { AnalyticsWeekPicker } from "./analytics-week-picker"
 
 interface TeacherAnalyticsTableProps {
     data: TeacherAnalytics[]
@@ -42,9 +43,12 @@ export function TeacherAnalyticsTable({ data }: TeacherAnalyticsTableProps) {
                             Weekly activity, completion rates, and student performance
                         </CardDescription>
                     </div>
-                    <Badge variant="outline" className="ml-auto">
-                        {data.length} Teachers
-                    </Badge>
+                    <div className="flex items-center gap-4 ml-auto">
+                        <AnalyticsWeekPicker />
+                        <Badge variant="outline">
+                            {data.length} Teachers
+                        </Badge>
+                    </div>
                 </div>
             </CardHeader>
             <CardContent>
