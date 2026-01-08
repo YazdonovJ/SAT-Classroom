@@ -7,6 +7,7 @@ import { ArrowLeft, Users, GraduationCap, Shield } from "lucide-react"
 import Link from "next/link"
 import { CreateTeacherDialog } from "@/components/admin/create-teacher-dialog"
 import { DeleteTeacherButton } from "@/components/admin/delete-teacher-button"
+import { DeleteStudentButton } from "@/components/admin/delete-student-button"
 
 export default async function AdminUsersPage() {
     await checkAdmin()
@@ -169,7 +170,10 @@ export default async function AdminUsersPage() {
                                         <p className="font-medium">{student.full_name}</p>
                                         <p className="text-sm text-muted-foreground">{student.email}</p>
                                     </div>
-                                    <Badge variant="outline">Student</Badge>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline">Student</Badge>
+                                        <DeleteStudentButton userId={student.id} userName={student.full_name} />
+                                    </div>
                                 </div>
                             ))}
                         </div>
