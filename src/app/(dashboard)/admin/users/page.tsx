@@ -157,7 +157,7 @@ export default async function AdminUsersPage() {
                         <GraduationCap className="h-5 w-5 text-indigo-500" />
                         <CardTitle>Students</CardTitle>
                     </div>
-                    <CardDescription>Recently registered students (showing 20)</CardDescription>
+                    <CardDescription>Recently registered students (Latest 20)</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {!students || students.length === 0 ? (

@@ -46,8 +46,8 @@ export function DeleteTeacherButton({ userId, userName }: DeleteTeacherButtonPro
     return (
         <AlertDialog open={open} onOpenChange={setOpen}>
             <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/90 hover:bg-destructive/10">
-                    <Trash2 className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                    <Trash2 className="h-5 w-5" />
                 </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
