@@ -27,7 +27,10 @@ export default async function AdminStudentsPage() {
             .select('cohorts(name)')
             .eq('user_id', student.id)
 
-        const classNames = enrollments?.map(e => e.cohorts?.name).filter(Boolean) || []
+        const classNames = enrollments?.map((e: any) => {
+            const cohort = Array.isArray(e.cohorts) ? e.cohorts[0] : e.cohorts
+            return cohort?.name
+        }).filter(Boolean) || []
 
         // Get Average Test Score
         const { data: attempts } = await supabase
