@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
-import { Clock, ChevronLeft, ChevronRight } from "lucide-react"
+import { Clock, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
@@ -21,27 +21,34 @@ export function TakeTestClient({ test, questions, cohortId }: TakeTestClientProp
     const [currentQuestion, setCurrentQuestion] = useState(0)
     const [answers, setAnswers] = useState<Record<string, string>>({})
     const [timeLeft, setTimeLeft] = useState(test.time_limit_minutes ? test.time_limit_minutes * 60 : null)
-    const [startTime] = useState(Date.now())
+    const [timeSpent, setTimeSpent] = useState(0) // Track actual time spent for scoring
+    const [isPaused, setIsPaused] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const router = useRouter()
     const supabase = createClient()
 
     // Timer
     useEffect(() => {
-        if (timeLeft === null) return
+        if (isPaused) return
 
         const interval = setInterval(() => {
-            setTimeLeft(prev => {
-                if (prev === null || prev <= 0) {
-                    handleSubmit(true) // Auto-submit when time runs out
-                    return 0
-                }
-                return prev - 1
-            })
+            setTimeSpent(prev => prev + 1)
+            
+            if (timeLeft !== null) {
+                setTimeLeft(prev => {
+                    if (prev === null || prev <= 1) {
+                        handleSubmit(true) // Auto-submit when time runs out
+                        return 0
+                    }
+                    return prev - 1
+                })
+            }
         }, 1000)
 
         return () => clearInterval(interval)
-    }, [timeLeft])
+    // NOTE: Intentionally omitting handleSubmit and timeLeft to avoid interval reset jitter
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isPaused])
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60)
@@ -78,8 +85,7 @@ export function TakeTestClient({ test, questions, cohortId }: TakeTestClientProp
                 }
             })
 
-            const score = Math.round((earnedPoints / totalPoints) * 100)
-            const timeSpent = Math.floor((Date.now() - startTime) / 1000)
+            const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0
 
             // Get attempt number
             const { count } = await supabase
@@ -124,26 +130,49 @@ export function TakeTestClient({ test, questions, cohortId }: TakeTestClientProp
     const progress = Math.round((currentQuestion / questions.length) * 100)
     const isLastQuestion = currentQuestion === questions.length - 1
 
+    if (isPaused) {
+        return (
+            <div className="space-y-6">
+                <Card>
+                    <CardContent className="p-12 text-center space-y-6">
+                        <h2 className="text-2xl font-bold">Test Paused</h2>
+                        <p className="text-muted-foreground">The timer is stopped and your progress is saved.</p>
+                        <Button size="lg" onClick={() => setIsPaused(false)}>
+                            <Play className="h-4 w-4 mr-2" />
+                            Resume Test
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        )
+    }
+
     return (
         <div className="space-y-6">
             {/* Header with timer and progress */}
             <Card>
                 <CardContent className="p-6">
                     <div className="flex items-center justify-between">
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex-1">
                             <p className="text-sm text-muted-foreground">
                                 Question {currentQuestion + 1} of {questions.length}
                             </p>
                             <Progress value={progress} className="w-64" />
                         </div>
-                        {timeLeft !== null && (
-                            <div className="flex items-center gap-2 text-lg font-bold">
-                                <Clock className="h-5 w-5" />
-                                <span className={timeLeft < 60 ? "text-destructive" : ""}>
-                                    {formatTime(timeLeft)}
-                                </span>
-                            </div>
-                        )}
+                        <div className="flex items-center gap-4">
+                            <Button variant="outline" size="sm" onClick={() => setIsPaused(true)}>
+                                <Pause className="h-4 w-4 mr-2" />
+                                Pause
+                            </Button>
+                            {timeLeft !== null && (
+                                <div className="flex items-center gap-2 text-lg font-bold bg-muted/50 px-3 py-1.5 rounded-md">
+                                    <Clock className="h-5 w-5 text-primary" />
+                                    <span className={timeLeft < 60 ? "text-destructive animate-pulse" : ""}>
+                                        {formatTime(timeLeft)}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </CardContent>
             </Card>
@@ -154,7 +183,7 @@ export function TakeTestClient({ test, questions, cohortId }: TakeTestClientProp
                     <CardTitle>Question {currentQuestion + 1}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    <p className="text-lg">{question.question_text}</p>
+                    <p className="text-lg whitespace-pre-wrap">{question.question_text}</p>
 
                     {question.question_type === 'multiple_choice' && (
                         <RadioGroup
