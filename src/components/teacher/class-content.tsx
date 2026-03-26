@@ -277,15 +277,24 @@ export function ClassContent({ cohort, students, units }: ClassContentProps) {
                         ) : (
                             <div className="space-y-3">
                                 {units.map((unit: any) => (
-                                    <div key={unit.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
-                                        <div>
-                                            <p className="font-medium">Unit {unit.order_index + 1}: {unit.title}</p>
+                                    <div key={unit.id} className="flex items-center justify-between p-3 rounded-lg border bg-background hover:bg-accent/50 transition-colors">
+                                        <Link href={`/teacher/class/${cohort.id}/unit/${unit.id}`} className="flex-1">
+                                            <p className="font-medium hover:underline decoration-primary underline-offset-4">
+                                                Unit {unit.order_index + 1}: {unit.title}
+                                            </p>
+                                        </Link>
+                                        <div className="flex items-center gap-3">
+                                            <Button variant="secondary" size="sm" asChild>
+                                                <Link href={`/teacher/class/${cohort.id}/unit/${unit.id}`}>
+                                                    View Scores
+                                                </Link>
+                                            </Button>
+                                            <UnitControl
+                                                unit={unit}
+                                                cohortId={cohort.id}
+                                                isUnlocked={unit.is_unlocked || false}
+                                            />
                                         </div>
-                                        <UnitControl
-                                            unit={unit}
-                                            cohortId={cohort.id}
-                                            isUnlocked={unit.is_unlocked || false}
-                                        />
                                     </div>
                                 ))}
                             </div>
