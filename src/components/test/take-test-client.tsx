@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Clock, ChevronLeft, ChevronRight, Pause, Play, Bookmark, MoreVertical, Pencil, ChevronUp, ChevronDown, Check, X, Highlighter } from "lucide-react"
+import { ChevronLeft, ChevronRight, Pause, Play, Bookmark, MoreVertical, ChevronUp, ChevronDown, Check, X, Highlighter } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { QuestionText } from "./question-text"
