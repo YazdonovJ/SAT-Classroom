@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, TrendingUp, TrendingDown, Users, Target, Clock } from "lucide-react"
 import Link from "next/link"
+import { QuestionText } from "@/components/test/question-text"
 
 export default async function TestAnalyticsPage({
     params
@@ -206,10 +207,10 @@ export default async function TestAnalyticsPage({
                                 <div key={q.id} className="space-y-2">
                                     <div className="flex items-start justify-between">
                                         <div className="flex-1">
-                                            <p className="font-medium">
-                                                Question {index + 1}: {q.question_text.substring(0, 80)}
-                                                {q.question_text.length > 80 && '...'}
-                                            </p>
+                                            <div className="font-medium">
+                                                <span>Question {index + 1}:</span>
+                                                <QuestionText text={q.question_text} className="mt-2" />
+                                            </div>
                                             <p className="text-sm text-muted-foreground">
                                                 Correct Answer: {q.correct_answer}
                                             </p>

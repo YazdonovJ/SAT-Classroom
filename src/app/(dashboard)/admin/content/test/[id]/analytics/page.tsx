@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft, TrendingUp, TrendingDown, Users, Target, Clock } from "lucide-react"
 import Link from "next/link"
 import { checkAdmin } from "@/lib/check-role"
+import { QuestionText } from "@/components/test/question-text"
 
 export default async function AdminTestAnalyticsPage({
     params
@@ -161,9 +162,10 @@ export default async function AdminTestAnalyticsPage({
                             <div key={q.id} className="space-y-2">
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
-                                        <p className="font-medium">
-                                            Q{index + 1}: {q.question_text.substring(0, 80)}...
-                                        </p>
+                                        <div className="font-medium">
+                                            <span>Q{index + 1}:</span>
+                                            <QuestionText text={q.question_text} className="mt-1" />
+                                        </div>
                                     </div>
                                     <Badge
                                         variant={

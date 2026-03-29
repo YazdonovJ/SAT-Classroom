@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, XCircle, ArrowRight, Home } from "lucide-react"
+import { QuestionText } from "@/components/test/question-text"
 
 export default function TestResultsPage({ params }: { params: Promise<{ id: string }> }) {
     const [attempt, setAttempt] = useState<any>(null)
@@ -120,7 +121,7 @@ export default function TestResultsPage({ params }: { params: Promise<{ id: stri
                                         </div>
                                     </CardHeader>
                                     <CardContent className="space-y-4">
-                                        <p>{q.question_text}</p>
+                                        <QuestionText text={q.question_text} />
 
                                         <div className="bg-muted/50 p-4 rounded-lg space-y-2 text-sm">
                                             <div className="flex gap-2">

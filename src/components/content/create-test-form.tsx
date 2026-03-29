@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch"
 import { Plus, Trash2, Save, Eye } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { QuestionText } from "@/components/test/question-text"
 
 interface Question {
     id: string
@@ -303,6 +304,7 @@ export function CreateTestForm({ units, redirectPath = '/teacher/content/tests' 
                                             placeholder="Enter your question here..."
                                             rows={2}
                                         />
+                                        <QuestionText text={question.question_text} className="mt-2 pointer-events-none opacity-80" />
                                     </div>
 
                                     {question.question_type === 'multiple_choice' && (

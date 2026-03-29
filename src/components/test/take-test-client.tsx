@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import { Clock, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { QuestionText } from "./question-text"
 
 interface TakeTestClientProps {
     test: any
@@ -183,7 +184,7 @@ export function TakeTestClient({ test, questions, cohortId }: TakeTestClientProp
                     <CardTitle>Question {currentQuestion + 1}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    <p className="text-lg whitespace-pre-wrap">{question.question_text}</p>
+                    <QuestionText text={question.question_text} />
 
                     {question.question_type === 'multiple_choice' && (
                         <RadioGroup
