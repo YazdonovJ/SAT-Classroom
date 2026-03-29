@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Clock, ChevronLeft, ChevronRight, Pause, Play, Bookmark, MoreVertical, Pencil, ChevronUp, ChevronDown, Check } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -19,38 +18,28 @@ export function TakeTestClient({ test, questions, cohortId }: TakeTestClientProp
     const [currentQuestion, setCurrentQuestion] = useState(0)
     const [answers, setAnswers] = useState<Record<string, string>>({})
     const [timeLeft, setTimeLeft] = useState(test.time_limit_minutes ? test.time_limit_minutes * 60 : null)
-    const [timeSpent, setTimeSpent] = useState(0) // Track actual time spent for scoring
+    const [timeSpent, setTimeSpent] = useState(0)
     const [isPaused, setIsPaused] = useState(false)
     const [submitting, setSubmitting] = useState(false)
-    
-    // New UI states
     const [markedQuestions, setMarkedQuestions] = useState<Set<string>>(new Set())
     const [isTimerHidden, setIsTimerHidden] = useState(false)
     const [isNavMenuOpen, setIsNavMenuOpen] = useState(false)
-    
+
     const router = useRouter()
     const supabase = createClient()
 
-    // Timer
     useEffect(() => {
         if (isPaused) return
-
         const interval = setInterval(() => {
             setTimeSpent(prev => prev + 1)
-            
             if (timeLeft !== null) {
                 setTimeLeft(prev => {
-                    if (prev === null || prev <= 1) {
-                        handleSubmit(true) // Auto-submit when time runs out
-                        return 0
-                    }
+                    if (prev === null || prev <= 1) { handleSubmit(true); return 0 }
                     return prev - 1
                 })
             }
         }, 1000)
-
         return () => clearInterval(interval)
-    // NOTE: Intentionally omitting handleSubmit and timeLeft to avoid interval reset jitter
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isPaused])
 
@@ -78,196 +67,175 @@ export function TakeTestClient({ test, questions, cohortId }: TakeTestClientProp
             const confirm = window.confirm("You haven't answered all questions. Submit anyway?")
             if (!confirm) return
         }
-
         setSubmitting(true)
         try {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) throw new Error("Not authenticated")
-
-            let correctCount = 0
-            let totalPoints = 0
-            let earnedPoints = 0
-
+            let totalPoints = 0, earnedPoints = 0
             questions.forEach(q => {
                 totalPoints += q.points
-                const userAnswer = answers[q.id]
-                if (userAnswer === q.correct_answer) {
-                    correctCount++
-                    earnedPoints += q.points
-                }
+                if (answers[q.id] === q.correct_answer) earnedPoints += q.points
             })
-
             const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0
-
-            const { count } = await supabase
-                .from('test_attempts')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', user.id)
-                .eq('test_id', test.id)
-
-            const attemptNumber = (count || 0) + 1
-
-            const { data: attempt, error } = await supabase
-                .from('test_attempts')
-                .insert({
-                    test_id: test.id,
-                    user_id: user.id,
-                    cohort_id: cohortId,
-                    answers: answers,
-                    score: score,
-                    points_earned: earnedPoints,
-                    total_points: totalPoints,
-                    submitted_at: new Date().toISOString(),
-                    time_spent_seconds: timeSpent,
-                    attempt_number: attemptNumber
-                })
-                .select()
-                .single()
-
+            const { count } = await supabase.from('test_attempts').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('test_id', test.id)
+            const { data: attempt, error } = await supabase.from('test_attempts').insert({
+                test_id: test.id, user_id: user.id, cohort_id: cohortId, answers, score,
+                points_earned: earnedPoints, total_points: totalPoints,
+                submitted_at: new Date().toISOString(), time_spent_seconds: timeSpent,
+                attempt_number: (count || 0) + 1
+            }).select().single()
             if (error) throw error
-
             toast.success(`Test submitted! Score: ${score}%`)
             router.push(`/student/test/${test.id}/results?attempt=${attempt.id}`)
         } catch (error: any) {
-            toast.error("Failed to submit test", {
-                description: error.message
-            })
+            toast.error("Failed to submit test", { description: error.message })
             setSubmitting(false)
         }
     }
 
+    /* ── Question parsing ─────────────────────────────────── */
     const parseQuestionContent = (text: string) => {
         if (!text) return { passage: "", prompt: "" }
-        
-        // Split by paragraph breaks
-        const blocks = text.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)
-        
-        if (blocks.length <= 1) {
-            // Very short question or math problem without separate setup
-            return { passage: "", prompt: blocks[0] || "" }
+        const promptPatterns = [
+            /which choice most (?:logically|effectively)/i,
+            /which choice (?:best )?completes/i,
+            /which choice best describes/i,
+            /which finding/i,
+            /based on the text/i,
+            /according to the text/i,
+            /what is the main/i,
+        ]
+        const lines = text.split('\n')
+        let splitIdx = -1
+        for (let i = lines.length - 1; i >= 0; i--) {
+            if (promptPatterns.some(p => p.test(lines[i]))) { splitIdx = i; break }
         }
-        
-        const passage = blocks.slice(0, -1).join('\n\n')
-        const prompt = blocks[blocks.length - 1]
-        
-        return { passage, prompt }
+        if (splitIdx > 0) {
+            return { passage: lines.slice(0, splitIdx).join('\n').trim(), prompt: lines.slice(splitIdx).join('\n').trim() }
+        }
+        const blocks = text.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)
+        if (blocks.length <= 1) return { passage: "", prompt: text }
+        return { passage: blocks.slice(0, -1).join('\n\n'), prompt: blocks[blocks.length - 1] }
     }
 
     const question = questions[currentQuestion]
     const isLastQuestion = currentQuestion === questions.length - 1
     const { passage, prompt } = parseQuestionContent(question?.question_text || "")
 
-    // SAT Style Dashed Border CSS
-    const colorfulDashedBorder = { backgroundImage: 'repeating-linear-gradient(to right, #000 0, #000 15px, transparent 15px, transparent 20px, #3b82f6 20px, #3b82f6 35px, transparent 35px, transparent 40px, #eab308 40px, #eab308 55px, transparent 55px, transparent 60px)' }
-
+    /* ── Pause screen ──────────────────────────────────────── */
     if (isPaused) {
         return (
-            <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center font-sans h-screen w-screen overflow-hidden text-center space-y-6">
-                <h2 className="text-3xl font-bold">Test Paused</h2>
-                <p className="text-muted-foreground max-w-md">The timer is stopped and your progress is securely saved. You may resume when you are ready.</p>
-                <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 px-8" onClick={() => setIsPaused(false)}>
-                    <Play className="h-5 w-5 mr-2" />
-                    Resume Testing
-                </Button>
+            <div style={{ position:'fixed', inset:0, zIndex:99999 }} className="bg-white flex flex-col items-center justify-center">
+                <div className="text-center space-y-5">
+                    <Pause className="w-16 h-16 mx-auto text-slate-300" />
+                    <h2 className="text-2xl font-bold text-slate-800">Test Paused</h2>
+                    <p className="text-slate-500 max-w-sm mx-auto text-sm">Your timer is stopped and progress is saved.</p>
+                    <button onClick={() => setIsPaused(false)} className="inline-flex items-center bg-[#1d4ed8] text-white font-semibold px-8 py-3 rounded-full hover:bg-[#1e40af] transition-colors">
+                        <Play className="w-4 h-4 mr-2" /> Resume Test
+                    </button>
+                </div>
             </div>
         )
     }
 
+    /* ── Main render ───────────────────────────────────────── */
     return (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col font-sans h-screen w-screen overflow-hidden selection:bg-blue-200">
-            {/* Header */}
-            <header className="flex h-[80px] items-center justify-between px-8 bg-white relative shrink-0">
-                <div className="flex flex-col flex-1">
-                    <h1 className="text-[17px] font-bold tracking-tight text-slate-900">
-                        Section 1, Module 1: Reading and Writing
-                    </h1>
-                    <button className="text-[13px] font-semibold text-slate-600 hover:text-slate-900 flex items-center mt-0.5">
-                        Directions <ChevronDown className="h-3 w-3 ml-1" />
-                    </button>
-                </div>
-                
-                <div className="flex flex-col items-center justify-center w-32 shrink-0 group">
-                    {!isTimerHidden ? (
-                        <div className="text-[28px] font-bold tracking-tight font-mono text-slate-900">{formatTime(timeLeft || 0)}</div>
-                    ) : (
-                        <div className="text-[28px] font-bold tracking-tight text-slate-400 mt-[-2px] mb-2 leading-none">
-                            <Clock className="w-8 h-8 opacity-75" />
-                        </div>
-                    )}
-                    <button 
-                        onClick={() => setIsTimerHidden(!isTimerHidden)}
-                        className="text-[11px] font-bold tracking-widest uppercase text-slate-500 hover:text-slate-800 border-2 border-slate-200 hover:border-slate-300 rounded-full px-3 py-0.5 mt-1 transition-colors"
-                    >
-                        {isTimerHidden ? "Show" : "Hide"}
-                    </button>
-                </div>
-                
-                <div className="flex items-center justify-end gap-6 flex-1 text-slate-700">
-                    <button className="flex flex-col items-center hover:text-black group">
-                        <Pencil className="h-[22px] w-[22px] mb-1 group-hover:bg-slate-100 rounded p-0.5 transition-colors" />
-                        <span className="text-[11px] font-bold">Annotate</span>
-                    </button>
-                    <button className="flex flex-col items-center hover:text-black group">
-                        <MoreVertical className="h-[22px] w-[22px] mb-1 group-hover:bg-slate-100 rounded p-0.5 transition-colors" />
-                        <span className="text-[11px] font-bold">More</span>
-                    </button>
-                    <div className="w-px h-10 bg-slate-200 ml-2 mr-2 hidden sm:block"></div>
-                    <button onClick={() => setIsPaused(true)} className="flex flex-col items-center hover:text-black group">
-                        <Pause className="h-[22px] w-[22px] mb-1 group-hover:bg-slate-100 rounded p-0.5 transition-colors" />
-                        <span className="text-[11px] font-bold">Break</span>
-                    </button>
-                </div>
-                
-                {/* Colored Dashed Border Simulator */}
-                <div className="absolute bottom-0 left-0 right-0 h-[3px] w-full" style={colorfulDashedBorder} />
-            </header>
+        <div style={{ position:'fixed', inset:0, zIndex:99999 }} className="bg-white flex flex-col">
 
-            {/* Main Split Content */}
-            <main className="flex-1 flex overflow-hidden bg-white">
-                {/* Left Pane - Passage */}
-                <div className="w-1/2 border-r-[3px] border-slate-200 p-10 overflow-y-auto">
-                    {passage ? (
-                         <div className="prose prose-slate max-w-none prose-p:leading-[1.8] prose-p:text-[17px] prose-p:mb-6">
-                             <QuestionText text={passage} />
-                         </div>
-                    ) : (
-                         <div className="flex h-full items-center justify-center text-slate-400 font-medium">
-                             [ No specific passage context for this question ]
-                         </div>
-                    )}
-                </div>
-
-                {/* Right Pane - Question */}
-                <div className="w-1/2 p-10 overflow-y-auto bg-slate-50/50 relative flex flex-col">
-                    
-                    {/* Top bar of question pane */}
-                    <div className="flex items-center justify-between mb-8 bg-slate-100 px-4 py-2 border border-slate-200 rounded-sm">
-                        <div className="bg-slate-900 text-white w-8 h-8 flex items-center justify-center font-bold text-lg rounded-sm shadow-sm relative">
-                            {currentQuestion + 1}
-                            {/* Visual nub to mimic Bluebook */}
-                            <div className="absolute top-1/2 -right-1.5 w-0 h-0 border-t-4 border-b-4 border-l-8 border-transparent border-l-slate-900 translate-y-[-50%]"></div>
+            {/* ═══ HEADER ═══ */}
+            <div className="shrink-0 border-b border-slate-200">
+                <div className="h-14 flex items-center justify-between px-6">
+                    {/* Left: Section info */}
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                        <div>
+                            <p className="text-sm font-bold text-slate-800 leading-tight">Section 1, Module 1: Reading and Writing</p>
+                            <button className="text-xs text-slate-500 hover:text-slate-700 flex items-center mt-0.5 font-medium">
+                                Directions <ChevronDown className="w-3 h-3 ml-0.5" />
+                            </button>
                         </div>
-                        <button 
-                            onClick={() => toggleMark(question.id)}
-                            className={`flex items-center text-[13px] font-bold px-3 py-1.5 rounded transition-colors ${
-                                markedQuestions.has(question.id) 
-                                ? "text-red-700 bg-red-100 hover:bg-red-200" 
-                                : "text-slate-600 hover:bg-slate-200"
-                            }`}
+                    </div>
+
+                    {/* Center: Timer */}
+                    <div className="flex flex-col items-center shrink-0 mx-6">
+                        {!isTimerHidden && (
+                            <span className="text-2xl font-bold font-mono text-slate-900 tabular-nums leading-none">
+                                {formatTime(timeLeft || 0)}
+                            </span>
+                        )}
+                        <button
+                            onClick={() => setIsTimerHidden(!isTimerHidden)}
+                            className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 mt-0.5"
                         >
-                            <Bookmark className={`h-[18px] w-[18px] mr-1.5 ${markedQuestions.has(question.id) ? "fill-current" : ""}`} />
-                            Mark for Review
+                            {isTimerHidden ? "Show" : "Hide"}
                         </button>
                     </div>
 
+                    {/* Right: Tools */}
+                    <div className="flex items-center gap-5 flex-1 justify-end">
+                        <button className="flex flex-col items-center text-slate-500 hover:text-slate-800 transition-colors">
+                            <Pencil className="w-4 h-4" />
+                            <span className="text-[10px] font-semibold mt-0.5">Annotate</span>
+                        </button>
+                        <button className="flex flex-col items-center text-slate-500 hover:text-slate-800 transition-colors">
+                            <MoreVertical className="w-4 h-4" />
+                            <span className="text-[10px] font-semibold mt-0.5">More</span>
+                        </button>
+                        <div className="w-px h-6 bg-slate-200" />
+                        <button onClick={() => setIsPaused(true)} className="flex flex-col items-center text-slate-500 hover:text-slate-800 transition-colors">
+                            <Pause className="w-4 h-4" />
+                            <span className="text-[10px] font-semibold mt-0.5">Break</span>
+                        </button>
+                    </div>
+                </div>
+                {/* Dashed color border */}
+                <div className="h-[3px]" style={{ backgroundImage: 'repeating-linear-gradient(to right, #1e293b 0 12px, transparent 12px 16px, #3b82f6 16px 28px, transparent 28px 32px, #eab308 32px 44px, transparent 44px 48px)' }} />
+            </div>
+
+            {/* ═══ MAIN CONTENT ═══ */}
+            <div className="flex-1 flex min-h-0">
+                {/* Left: Passage */}
+                <div className="w-1/2 overflow-y-auto border-r border-slate-200 px-8 py-6">
+                    {passage ? (
+                        <div className="text-[15px] leading-[1.75] text-slate-700 max-w-[540px]">
+                            <QuestionText text={passage} />
+                        </div>
+                    ) : (
+                        <div className="h-full flex items-center justify-center">
+                            <p className="text-sm text-slate-400 italic">No passage for this question.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right: Question + Options */}
+                <div className="w-1/2 overflow-y-auto px-8 py-6 flex flex-col">
+                    {/* Question badge + Mark for Review */}
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <span className="inline-flex items-center justify-center w-9 h-9 bg-slate-900 text-white text-sm font-bold rounded">
+                                {currentQuestion + 1}
+                            </span>
+                            <button
+                                onClick={() => toggleMark(question.id)}
+                                className={`inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded transition-colors ${
+                                    markedQuestions.has(question.id)
+                                        ? "text-red-700 bg-red-50"
+                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                                }`}
+                            >
+                                <Bookmark className={`w-3.5 h-3.5 mr-1 ${markedQuestions.has(question.id) ? "fill-current" : ""}`} />
+                                Mark for Review
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Prompt */}
-                    <div className="prose prose-slate max-w-none prose-p:leading-[1.8] prose-p:text-[17px] font-medium text-slate-900 mb-8">
+                    <div className="text-[15px] leading-[1.7] text-slate-800 mb-5">
                         <QuestionText text={prompt} />
                     </div>
 
-                    {/* Options */}
+                    {/* Options — pushed right after the prompt, no mt-auto */}
                     {question.question_type === 'multiple_choice' && (
-                        <div className="mt-auto space-y-4 pt-4">
+                        <div className="space-y-3">
                             {question.options.map((option: string, index: number) => {
                                 const letter = String.fromCharCode(65 + index)
                                 const isSelected = answers[question.id] === letter
@@ -275,129 +243,114 @@ export function TakeTestClient({ test, questions, cohortId }: TakeTestClientProp
                                     <button
                                         key={index}
                                         onClick={() => handleAnswer(question.id, letter)}
-                                        className={`w-full text-left flex items-start p-[18px] rounded-[10px] border-2 transition-all duration-200 ${
-                                            isSelected 
-                                            ? "border-[#2563eb] bg-blue-50/50 shadow-sm" 
-                                            : "border-slate-300 bg-white hover:border-[#2563eb]/60"
+                                        className={`w-full text-left flex items-start px-4 py-3.5 rounded-lg border-2 transition-all duration-150 ${
+                                            isSelected
+                                                ? "border-[#2563eb] bg-blue-50/60"
+                                                : "border-slate-200 hover:border-slate-400 bg-white"
                                         }`}
                                     >
-                                        <span className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full border-2 mr-5 font-bold text-[15px] pt-px ${
-                                            isSelected 
-                                            ? "border-[#2563eb] bg-[#2563eb] text-white" 
-                                            : "border-slate-400 text-slate-700 font-semibold"
+                                        <span className={`shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center text-sm font-bold mr-3.5 mt-0.5 ${
+                                            isSelected
+                                                ? "border-[#2563eb] bg-[#2563eb] text-white"
+                                                : "border-slate-400 text-slate-600"
                                         }`}>
                                             {letter}
                                         </span>
-                                        <span className="text-[16px] leading-relaxed text-slate-800 pt-[2px]">
-                                            {option}
-                                        </span>
+                                        <span className="text-[14px] leading-relaxed text-slate-700 pt-[3px]">{option}</span>
                                     </button>
                                 )
                             })}
                         </div>
                     )}
                 </div>
-            </main>
+            </div>
 
-            {/* Footer Nav */}
-            <footer className="h-[80px] bg-white flex items-center justify-between px-8 shrink-0 relative border-t-2 border-slate-100 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-                {/* Colored Border */}
-                <div className="absolute top-0 left-0 right-0 h-[3px] w-full transform -translate-y-full" style={colorfulDashedBorder} />
-                
-                <div className="font-bold text-[17px] text-slate-800 w-48 flex-1">
-                    SAT Classroom
-                </div>
-                
-                <div className="flex items-center justify-center relative z-20 flex-1">
-                    <button 
-                        onClick={() => setIsNavMenuOpen(!isNavMenuOpen)}
-                        className="font-bold text-[15px] text-white bg-slate-900 hover:bg-slate-800 rounded-md px-6 py-2.5 flex items-center shadow-md transition-all active:scale-95"
-                    >
-                        Question {currentQuestion + 1} of {questions.length}
-                        {isNavMenuOpen ? <ChevronDown className="h-5 w-5 ml-2 opacity-80" /> : <ChevronUp className="h-5 w-5 ml-2 opacity-80" />}
-                    </button>
-                    
-                    {/* Nav Popup Grid */}
-                    {isNavMenuOpen && (
-                        <>
-                            {/* Invisible overlay to close on clicking outside */}
-                            <div className="fixed inset-0 z-10" onClick={() => setIsNavMenuOpen(false)}></div>
-                            <div className="absolute bottom-[calc(100%+24px)] left-1/2 -translate-x-1/2 w-[480px] bg-white border border-slate-200 shadow-[0_10px_40px_rgba(0,0,0,0.1)] rounded-xl p-6 z-30">
-                                <div className="flex items-center justify-between mb-4 border-b pb-4">
-                                    <h3 className="font-bold text-lg">Section 1: Reading and Writing</h3>
-                                    <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
-                                        <span className="flex items-center"><Bookmark className="w-3 h-3 text-red-600 fill-current mr-1"/> For Review</span>
-                                        <span className="flex items-center"><div className="w-3 h-3 bg-[#2563eb] rounded-full mr-1"/> Answered</span>
+            {/* ═══ FOOTER ═══ */}
+            <div className="shrink-0 border-t border-slate-200 relative">
+                <div className="h-[3px]" style={{ backgroundImage: 'repeating-linear-gradient(to right, #1e293b 0 12px, transparent 12px 16px, #3b82f6 16px 28px, transparent 28px 32px, #eab308 32px 44px, transparent 44px 48px)' }} />
+                <div className="h-14 flex items-center justify-between px-6">
+                    {/* Left: Brand */}
+                    <span className="text-sm font-bold text-slate-700 flex-1">SAT Classroom</span>
+
+                    {/* Center: Question nav trigger */}
+                    <div className="relative flex-1 flex justify-center">
+                        <button
+                            onClick={() => setIsNavMenuOpen(!isNavMenuOpen)}
+                            className="inline-flex items-center bg-slate-900 text-white text-sm font-semibold px-5 py-2 rounded hover:bg-slate-800 transition-colors"
+                        >
+                            Question {currentQuestion + 1} of {questions.length}
+                            {isNavMenuOpen ? <ChevronDown className="w-4 h-4 ml-1.5" /> : <ChevronUp className="w-4 h-4 ml-1.5" />}
+                        </button>
+
+                        {/* Nav grid popup */}
+                        {isNavMenuOpen && (
+                            <>
+                                <div className="fixed inset-0" style={{ zIndex: 10 }} onClick={() => setIsNavMenuOpen(false)} />
+                                <div className="absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 w-96 bg-white border border-slate-200 shadow-xl rounded-lg p-5" style={{ zIndex: 20 }}>
+                                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
+                                        <span className="text-sm font-bold text-slate-800">Question Navigator</span>
+                                        <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+                                            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#2563eb]" /> Answered</span>
+                                            <span className="flex items-center gap-1"><Bookmark className="w-2.5 h-2.5 fill-red-500 text-red-500" /> Review</span>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-9 gap-1.5">
+                                        {questions.map((q, idx) => {
+                                            const isAnswered = !!answers[q.id]
+                                            const isMarked = markedQuestions.has(q.id)
+                                            const isCurrent = idx === currentQuestion
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => { setCurrentQuestion(idx); setIsNavMenuOpen(false) }}
+                                                    className={`relative w-9 h-9 flex items-center justify-center rounded text-xs font-bold transition-all ${
+                                                        isCurrent
+                                                            ? "bg-slate-900 text-white"
+                                                            : isAnswered
+                                                                ? "bg-blue-50 text-[#2563eb] border border-[#2563eb]"
+                                                                : "bg-slate-50 text-slate-500 border border-slate-200 hover:border-slate-400"
+                                                    }`}
+                                                >
+                                                    {idx + 1}
+                                                    {isMarked && <Bookmark className="absolute -top-1 -right-1 w-2.5 h-2.5 fill-red-500 text-red-500" />}
+                                                </button>
+                                            )
+                                        })}
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-7 gap-3">
-                                    {questions.map((q, idx) => {
-                                        const isAnswered = !!answers[q.id]
-                                        const isMarked = markedQuestions.has(q.id)
-                                        const isCurrent = idx === currentQuestion
-                                        
-                                        return (
-                                            <button 
-                                                key={idx}
-                                                onClick={() => { setCurrentQuestion(idx); setIsNavMenuOpen(false); }}
-                                                className={`relative w-12 h-12 flex items-center justify-center rounded-md font-bold text-sm border-2 transition-all ${
-                                                    isCurrent ? "border-slate-900 bg-slate-100" // Active focus
-                                                    : isAnswered ? "border-[#2563eb] text-[#2563eb] bg-blue-50/50 hover:bg-blue-100" // Answered
-                                                    : "border-slate-200 text-slate-600 hover:border-slate-400 bg-white" // Unanswered
-                                                }`}
-                                            >
-                                                {idx + 1}
-                                                {/* Mark for review pin */}
-                                                {isMarked && (
-                                                    <div className="absolute -top-1.5 -right-1.5">
-                                                        <Bookmark className="w-[14px] h-[14px] text-red-600 fill-current" />
-                                                    </div>
-                                                )}
-                                                {/* Hidden checkmark but kept the colored border styling above */}
-                                                {isAnswered && !isCurrent && (
-                                                    <div className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full bg-[#2563eb]"></div>
-                                                )}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        </>
-                    )}
+                            </>
+                        )}
+                    </div>
+
+                    {/* Right: Nav buttons */}
+                    <div className="flex items-center gap-2 flex-1 justify-end">
+                        {currentQuestion > 0 && (
+                            <button
+                                onClick={() => setCurrentQuestion(currentQuestion - 1)}
+                                className="inline-flex items-center text-sm font-semibold text-[#2563eb] hover:text-blue-800 px-3 py-2 rounded hover:bg-blue-50 transition-colors"
+                            >
+                                <ChevronLeft className="w-4 h-4 mr-0.5" /> Back
+                            </button>
+                        )}
+                        {isLastQuestion ? (
+                            <button
+                                onClick={() => handleSubmit(false)}
+                                disabled={submitting}
+                                className="inline-flex items-center bg-[#2563eb] hover:bg-blue-700 text-white text-sm font-semibold px-6 py-2 rounded-full transition-colors disabled:opacity-50"
+                            >
+                                {submitting ? "Submitting..." : "Submit"} {!submitting && <Check className="w-4 h-4 ml-1" />}
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => setCurrentQuestion(currentQuestion + 1)}
+                                className="inline-flex items-center bg-[#2563eb] hover:bg-blue-700 text-white text-sm font-semibold px-6 py-2 rounded-full transition-colors"
+                            >
+                                Next <ChevronRight className="w-4 h-4 ml-0.5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
-                
-                <div className="flex items-center justify-end gap-3 flex-1">
-                    {/* We only show Previous if it's not the first question */}
-                    {currentQuestion > 0 && (
-                        <Button 
-                            variant="ghost"
-                            className="font-bold text-[15px] px-6 h-11 text-blue-600 hover:text-blue-700 hover:bg-blue-50 hidden sm:flex"
-                            onClick={() => setCurrentQuestion(currentQuestion - 1)}
-                        >
-                            <ChevronLeft className="h-5 w-5 mr-1" />
-                            Prev
-                        </Button>
-                    )}
-                    {isLastQuestion ? (
-                        <Button 
-                            onClick={() => handleSubmit(false)} 
-                            disabled={submitting}
-                            className="font-bold text-[15px] bg-[#2563eb] hover:bg-blue-700 text-white px-8 h-11 rounded-full shadow-sm pr-6"
-                        >
-                            {submitting ? "Submitting..." : "Submit Test"}
-                            {!submitting && <Check className="h-5 w-5 ml-2" />}
-                        </Button>
-                    ) : (
-                        <Button 
-                            onClick={() => setCurrentQuestion(currentQuestion + 1)}
-                            className="font-bold text-[15px] bg-[#2563eb] hover:bg-blue-700 text-white px-8 h-11 rounded-full shadow-sm pr-6"
-                        >
-                            Next
-                            <ChevronRight className="h-5 w-5 ml-1" />
-                        </Button>
-                    )}
-                </div>
-            </footer>
+            </div>
         </div>
     )
 }
