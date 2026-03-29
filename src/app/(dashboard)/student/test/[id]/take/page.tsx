@@ -1,8 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft } from "lucide-react"
-import Link from "next/link"
 import { TakeTestClient } from "@/components/test/take-test-client"
 
 export default async function TakeTestPage({
@@ -49,27 +46,21 @@ export default async function TakeTestPage({
 
     if (!enrollment) redirect('/student')
 
-    return (
-        <div className="min-h-screen bg-muted/20 p-8 space-y-8">
-            <div className="flex items-center gap-4">
-                <Link href={`/student/unit/${test.unit_id}/tests`}>
-                    <Button variant="ghost" size="icon">
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                </Link>
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">{test.title}</h1>
-                    <p className="text-muted-foreground mt-1">
-                        {test.description}
-                    </p>
-                </div>
-            </div>
+    // Get student profile name
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single()
 
-            <TakeTestClient
-                test={test}
-                questions={questions || []}
-                cohortId={enrollment.cohort_id}
-            />
-        </div>
+    const studentName = profile?.full_name || user.email?.split('@')[0] || 'Student'
+
+    return (
+        <TakeTestClient
+            test={test}
+            questions={questions || []}
+            cohortId={enrollment.cohort_id}
+            studentName={studentName}
+        />
     )
 }
