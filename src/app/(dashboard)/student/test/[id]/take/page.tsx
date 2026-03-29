@@ -38,7 +38,7 @@ export default async function TakeTestPage({
 
     const { data: unit } = await supabase
         .from('units')
-        .select('course_id')
+        .select('course_id, title')
         .eq('id', test.unit_id)
         .single()
 
@@ -61,6 +61,7 @@ export default async function TakeTestPage({
             questions={questions || []}
             cohortId={enrollment.cohort_id}
             studentName={studentName}
+            unitName={unit?.title || 'Unit'}
         />
     )
 }

@@ -13,9 +13,10 @@ interface TakeTestClientProps {
     questions: any[]
     cohortId: string
     studentName?: string
+    unitName?: string
 }
 
-export function TakeTestClient({ test, questions, cohortId, studentName = "Student" }: TakeTestClientProps) {
+export function TakeTestClient({ test, questions, cohortId, studentName = "Student", unitName = "Unit" }: TakeTestClientProps) {
     const [currentQuestion, setCurrentQuestion] = useState(0)
     const [answers, setAnswers] = useState<Record<string, string>>({})
     const [timeLeft, setTimeLeft] = useState(test.time_limit_minutes ? test.time_limit_minutes * 60 : null)
@@ -217,7 +218,7 @@ export function TakeTestClient({ test, questions, cohortId, studentName = "Stude
             <div className="shrink-0">
                 <div className="h-12 flex items-center justify-between px-5">
                     <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-bold text-slate-800 leading-tight">Section 1, Module 1: Reading and Writing</p>
+                        <p className="text-[13px] font-bold text-slate-800 leading-tight">{unitName}: {test.title}</p>
                         <button className="text-[11px] text-slate-500 hover:text-slate-700 flex items-center font-medium">Directions <ChevronDown className="w-3 h-3 ml-0.5" /></button>
                     </div>
                     <div className="flex flex-col items-center shrink-0 mx-4">
@@ -258,7 +259,7 @@ export function TakeTestClient({ test, questions, cohortId, studentName = "Stude
                 {/* Left Passage */}
                 <div ref={passageRef} className={`w-1/2 overflow-y-auto border-r border-slate-200 px-6 py-4 ${annotateMode ? "cursor-text select-text" : ""}`}>
                     {passage ? (
-                        <div className="text-[15px] leading-[1.75] text-slate-700 max-w-[560px]">
+                        <div className="text-[15px] leading-[1.75] text-slate-700">
                             {(() => {
                                 const currentHighlights = highlights[currentQuestion] || []
                                 if (currentHighlights.length === 0) return <QuestionText text={passage} />
